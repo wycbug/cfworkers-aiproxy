@@ -1,0 +1,477 @@
+openapi: 3.0.3
+info:
+  title: Cloudflare Workers AI Proxy
+  description: |
+    A Cloudflare Workers-based AI proxy that routes AI API requests through Cloudflare AI Gateway.
+
+    ## Features
+    - Support for multiple AI providers (OpenAI, Anthropic, Google Gemini, etc.)
+    - Two routing modes:
+      - **Cloudflare AI Gateway mode** (default): Routes through Cloudflare's AI Gateway
+      - **Custom provider mode**: Routes directly to user-specified baseUrl
+    - Pack ID authentication for Shortcut app integration
+    - CORS enabled for all routes
+
+    ## Authentication
+    All proxy routes require Pack ID authentication via request headers. The Pack ID must be included
+    in one of the following headers: `X-Pack-ID`, `packID`, `x-pack-id`, or `packid`.
+
+    ## Supported Providers
+    OpenAI, Anthropic (Claude), Google Gemini, Google Vertex AI, AWS Bedrock, Azure OpenAI,
+    xAI (Grok), HuggingFace, Mistral, Groq, DeepSeek, Cohere, OpenRouter, Perplexity,
+    Replicate, Workers AI, ElevenLabs, Fal
+
+  version: 1.0.0
+  contact:
+    name: API Support
+  license:
+    name: MIT
+
+servers:
+  - url: https://aiproxy.mediahelper.xyz
+    description: Production server
+  - url: http://localhost:8787
+    description: Local development server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Proxy
+    description: AI provider proxy endpoints
+
+paths:
+  /:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns the service status and version information
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: AI Gateway Proxy is running
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+                    example: 1.0.0
+
+  /proxy/{provider}/{path}:
+    get:
+      tags:
+        - Proxy
+      summary: Proxy GET request to AI provider
+      description: |
+        Forwards GET requests to the specified AI provider through Cloudflare AI Gateway
+        or directly to a custom provider endpoint.
+      operationId: proxyGet
+      security:
+        - PackIdAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+        - $ref: '#/components/parameters/Path'
+      responses:
+        '200':
+          description: Successful response from upstream provider
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Response format varies by provider
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+
+    post:
+      tags:
+        - Proxy
+      summary: Proxy POST request to AI provider
+      description: |
+        Forwards POST requests to the specified AI provider. Supports two modes:
+
+        **1. Cloudflare AI Gateway mode (default)**
+        - Routes through `gateway.ai.cloudflare.com/v1/{account}/{gateway}/{provider}`
+        - Requires CF_ACCOUNT_ID and CF_GATEWAY_NAME environment variables
+
+        **2. Custom provider mode**
+        - Routes directly to user-specified `baseUrl` from request body
+        - The `baseUrl` field is stripped from the body before forwarding
+
+      operationId: proxyPost
+      security:
+        - PackIdAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+        - $ref: '#/components/parameters/Path'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: |
+                Request body format depends on the target AI provider API.
+                Additional proxy-specific fields can be included:
+              properties:
+                baseUrl:
+                  type: string
+                  description: |
+                    Optional. Custom base URL to route directly to a specific provider endpoint,
+                    bypassing Cloudflare AI Gateway. This field will be stripped before forwarding.
+                  example: https://api.openai.com
+                baseurl:
+                  type: string
+                  description: Alternative lowercase version of baseUrl (will be stripped)
+                apiType:
+                  type: string
+                  description: |
+                    Optional API type hint for future use (currently mainly for context).
+                    Default is "openai". This field will be stripped before forwarding.
+                  default: openai
+                  example: openai
+                apitype:
+                  type: string
+                  description: Alternative lowercase version of apiType (will be stripped)
+              additionalProperties: true
+              example:
+                model: gpt-4
+                messages:
+                  - role: user
+                    content: Hello, how are you?
+                temperature: 0.7
+                max_tokens: 150
+            examples:
+              openaiChatCompletion:
+                summary: OpenAI Chat Completion
+                description: Standard OpenAI API request via Cloudflare Gateway
+                value:
+                  model: gpt-4
+                  messages:
+                    - role: user
+                      content: What is the capital of France?
+                  temperature: 0.7
+
+              customBaseUrl:
+                summary: Custom Provider Base URL
+                description: Direct routing to custom provider endpoint
+                value:
+                  baseUrl: https://api.anthropic.com
+                  model: claude-3-5-sonnet-20241022
+                  messages:
+                    - role: user
+                      content: Explain quantum computing
+                  max_tokens: 1024
+
+              geminiRequest:
+                summary: Google Gemini Request
+                description: Gemini API request through Cloudflare Gateway
+                value:
+                  model: gemini-pro
+                  prompt: Write a short poem about AI
+                  temperature: 0.9
+      responses:
+        '200':
+          description: Successful response from upstream provider
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Response format varies by provider
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-sent events stream for streaming responses
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+
+    put:
+      tags:
+        - Proxy
+      summary: Proxy PUT request to AI provider
+      description: Forwards PUT requests to the specified AI provider
+      operationId: proxyPut
+      security:
+        - PackIdAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+        - $ref: '#/components/parameters/Path'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Successful response from upstream provider
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+
+    patch:
+      tags:
+        - Proxy
+      summary: Proxy PATCH request to AI provider
+      description: Forwards PATCH requests to the specified AI provider
+      operationId: proxyPatch
+      security:
+        - PackIdAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+        - $ref: '#/components/parameters/Path'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Successful response from upstream provider
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+
+    delete:
+      tags:
+        - Proxy
+      summary: Proxy DELETE request to AI provider
+      description: Forwards DELETE requests to the specified AI provider
+      operationId: proxyDelete
+      security:
+        - PackIdAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+        - $ref: '#/components/parameters/Path'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Successful response from upstream provider
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+
+components:
+  securitySchemes:
+    PackIdAuth:
+      type: apiKey
+      in: header
+      name: X-Pack-ID
+      description: |
+        Pack ID for authentication. Can be provided in any of these headers:
+        - X-Pack-ID (recommended)
+        - packID
+        - x-pack-id
+        - packid
+
+        The Pack ID must be included in the ALLOWED_PACK_IDS environment variable.
+
+  parameters:
+    Provider:
+      name: provider
+      in: path
+      required: true
+      description: |
+        AI provider name or alias. Supported values:
+
+        **OpenAI & Azure:**
+        - `openai` - OpenAI API
+        - `azure`, `azure-openai` - Azure OpenAI
+
+        **Anthropic:**
+        - `anthropic`, `claude` - Anthropic Claude
+
+        **Google:**
+        - `gemini`, `google-gemini`, `google-ai-studio` - Google Gemini
+        - `vertex`, `google-vertex`, `google-vertex-ai` - Google Vertex AI
+
+        **AWS:**
+        - `bedrock`, `aws-bedrock` - AWS Bedrock
+
+        **Others:**
+        - `xai`, `grok` - xAI Grok
+        - `huggingface`, `hf` - HuggingFace
+        - `mistral` - Mistral AI
+        - `groq` - Groq
+        - `deepseek` - DeepSeek
+        - `cohere` - Cohere
+        - `openrouter` - OpenRouter
+        - `perplexity` - Perplexity
+        - `replicate` - Replicate
+        - `workers-ai` - Cloudflare Workers AI
+        - `elevenlabs` - ElevenLabs
+        - `fal`, `fal-ai` - Fal.ai
+
+      schema:
+        type: string
+        enum:
+          - openai
+          - azure
+          - azure-openai
+          - anthropic
+          - claude
+          - gemini
+          - google-gemini
+          - google-ai-studio
+          - vertex
+          - google-vertex
+          - google-vertex-ai
+          - bedrock
+          - aws-bedrock
+          - xai
+          - grok
+          - huggingface
+          - hf
+          - mistral
+          - groq
+          - deepseek
+          - cohere
+          - openrouter
+          - perplexity
+          - replicate
+          - workers-ai
+          - elevenlabs
+          - fal
+          - fal-ai
+      example: openai
+
+    Path:
+      name: path
+      in: path
+      required: true
+      description: |
+        API endpoint path for the target provider. This should match the provider's API path structure.
+
+        Examples:
+        - For OpenAI: `v1/chat/completions`
+        - For Anthropic: `v1/messages`
+        - For Gemini: `v1beta/models/gemini-pro:generateContent`
+      schema:
+        type: string
+      example: v1/chat/completions
+
+  responses:
+    Unauthorized:
+      description: Unauthorized - Missing or invalid Pack ID
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              code:
+                type: integer
+                example: 401
+              message:
+                type: string
+                enum:
+                  - 'Unauthorized: Missing Pack ID in headers'
+                  - 'Unauthorized: Invalid Pack ID'
+          examples:
+            missingPackId:
+              summary: Missing Pack ID
+              value:
+                code: 401
+                message: 'Unauthorized: Missing Pack ID in headers'
+            invalidPackId:
+              summary: Invalid Pack ID
+              value:
+                code: 401
+                message: 'Unauthorized: Invalid Pack ID'
+
+    ServerError:
+      description: Server configuration error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+          examples:
+            missingConfig:
+              summary: Missing Cloudflare configuration
+              value:
+                error: 'Missing Cloudflare AI Gateway configuration (CF_ACCOUNT_ID or CF_GATEWAY_NAME)'
+            configError:
+              summary: Server configuration error
+              value:
+                error: 'Server configuration error'
+
+    UpstreamError:
+      description: Upstream request failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'Upstream request failed: Connection timeout'
+
+  examples:
+    OpenAIChatRequest:
+      summary: OpenAI Chat Completion
+      value:
+        model: gpt-4
+        messages:
+          - role: system
+            content: You are a helpful assistant.
+          - role: user
+            content: What is machine learning?
+        temperature: 0.7
+        max_tokens: 500
+
+    AnthropicMessagesRequest:
+      summary: Anthropic Messages API
+      value:
+        model: claude-3-5-sonnet-20241022
+        max_tokens: 1024
+        messages:
+          - role: user
+            content: Explain the theory of relativity
+
+    GeminiGenerateRequest:
+      summary: Google Gemini Generate
+      value:
+        contents:
+          - parts:
+              - text: Tell me about artificial intelligence
+        generationConfig:
+          temperature: 0.9
+          maxOutputTokens: 800
+
+security:
+  - PackIdAuth: []
