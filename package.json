@@ -1,0 +1,19 @@
+{
+  "name": "cfworkers-aiproxy",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "type-check": "wrangler types && tsc --noEmit",
+    "install-deps": "bun install",
+    "update-deps": "bun update"
+  },
+  "dependencies": {
+    "hono": "^4.10.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "wrangler": "^4.49.0"
+  }
+}

@@ -1,0 +1,14 @@
+name = "cfworkers-aiproxy"
+main = "src/index.ts"
+compatibility_date = "2025-08-11"
+routes = [
+  { pattern = "aiproxy.mediahelper.xyz", custom_domain = true }
+]
+
+[vars]
+# Cloudflare AI Gateway Configuration
+CF_ACCOUNT_ID = "3772daac86ca0ad8d91bd57b1195aee0"
+CF_GATEWAY_NAME = "ai-gateway"
+
+# Shortcut Pack IDs (Validation)
+ALLOWED_PACK_IDS = "replit_3f0a2cf4dcf163fb, replit_306620fe76ed23f4, replit_3007f9ea912663e4"
