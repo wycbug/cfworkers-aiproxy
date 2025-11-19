@@ -2,7 +2,7 @@ name = "cfworkers-aiproxy"
 main = "src/index.ts"
 compatibility_date = "2025-08-11"
 routes = [
-  { pattern = "aiproxy.mediahelper.xyz", custom_domain = true }
+  { pattern = "aigateway.mediahelper.xyz", custom_domain = true }
 ]
 
 [vars]
